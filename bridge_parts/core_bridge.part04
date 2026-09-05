@@ -1,0 +1,210 @@
+ (result.didMutate) setActiveTab('preview');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const openNewElementModal = () => {
+    setEditingElementId(null);
+    setFormError(null);
+    setCustomForm({ ...emptyElementForm });
+    setShowCustomModal(true);
+  };
+
+  const openEditElementModal = (element) => {
+    const d = element.profile?.dimensions || {};
+    setEditingElementId(element.id);
+    setFormError(null);
+    setCustomForm({
+      name: element.name || '',
+      role: element.role || 'custom',
+      profileType: element.profile?.type || 'custom',
+      profileName: element.profile?.name || '',
+      profileWidth: d.width ?? '',
+      profileHeight: d.height ?? '',
+      profileThickness: d.thickness ?? '',
+      profileDiameter: d.diameter ?? '',
+      weightPerMeter: element.profile?.weightPerMeter ?? '',
+      weightSourceNote: element.profile?.weightSourceName || '',
+      pricePerMeter: element.profile?.pricePerMeter ?? '',
+      pricePerKg: element.profile?.pricePerKg ?? '',
+      priceSourceNote: element.profile?.priceSourceNote || '',
+      lengthMm: element.lengthMm ?? 0,
+      orientation: element.orientation || 'horizontal',
+      startX: element.start?.x ?? 0,
+      startY: element.start?.y ?? 0,
+      endX: element.end?.x ?? 0,
+      endY: element.end?.y ?? 0,
+      materialName: element.material?.name || ''
+    });
+    setShowCustomModal(true);
+  };
+
+  const handleProfileNameChange = (profileName) => {
+    setCustomForm(prev => applyProfileNameToForm(prev, profileName));
+    setFormError(null);
+  };
+
+  const handleSaveElement = () => {
+    const validationError = validateElementForm(customForm);
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
+
+    const start = { x: Number(customForm.startX), y: Number(customForm.startY) };
+    const end = { x: Number(customForm.endX), y: Number(customForm.endY) };
+    const lengthMm = calculateLengthMm(start, end);
+    const profile = buildProfileFromForm(customForm);
+    const existing = editingElementId ? construction.elements.find(e => e.id === editingElementId) : null;
+
+    const savedElement = {
+      id: editingElementId || getNextElementId(construction.elements),
+      role: customForm.role.trim(),
+      name: (customForm.name || '').trim() || customForm.profileName.trim(),
+      category: profile.type === 'cantilever_c_profile' ? 'c_profile' : (profile.type || 'custom'),
+      profile,
+      material: { name: customForm.materialName || null, source: customForm.materialName ? 'userProvided' : 'unknown' },
+      lengthMm,
+      orientation: deriveOrientation(start, end),
+      start,
+      end,
+      parameters: existing?.parameters || {},
+      source: editingElementId ? 'manual_edit' : 'manual_add'
+    };
+
+    setConstruction(prev => ({
+      ...prev,
+      elements: editingElementId
+        ? prev.elements.map(el => el.id === editingElementId ? savedElement : el)
+        : [...prev.elements, savedElement]
+    }));
+    setShowCustomModal(false);
+    setEditingElementId(null);
+    setFormError(null);
+  };
+
+  const removeElement = (id) => {
+    setConstruction(prev => ({ ...prev, elements: prev.elements.filter(el => el.id !== id) }));
+  };
+
+  const cuttingListAndFinancials = useMemo(
+    () => calculateCuttingListAndFinancials(construction),
+    [construction]
+  );
+
+  const computedModel = useMemo(() => {
+    const totalLength = validateDimensionMm(construction.globalDimensions?.totalLength) ?? ((construction.globalDimensions?.openingWidth || 0) + (construction.globalDimensions?.counterweightLength || 0));
+    return { totalLength };
+  }, [construction]);
+
+  const handleMaterialPriceChange = (value) => {
+    const normalized = value === '' ? null : normalizeNonNegativeNumber(value);
+    setConstruction(prev => ({
+      ...prev,
+      financials: {
+        ...prev.financials,
+        materialPricing: {
+          ...(prev.financials?.materialPricing || {}),
+          pricePerKg: normalized,
+          currency: 'CZK',
+          source: normalized === null ? 'unknown' : 'userProvided'
+        }
+      }
+    }));
+  };
+
+  const handleMaterialPriceSourceNoteChange = (value) => {
+    setConstruction(prev => ({
+      ...prev,
+      financials: {
+        ...prev.financials,
+        materialPricing: {
+          ...(prev.financials?.materialPricing || {}),
+          sourceNote: value
+        }
+      }
+    }));
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const knownProfileInForm = isKnownProfileName(customForm.profileName);
+  const formLengthPreview = calculateLengthMm(
+    { x: Number(customForm.startX), y: Number(customForm.startY) },
+    { x: Number(customForm.endX), y: Number(customForm.endY) }
+  );
+  const formOrientationPreview = deriveOrientation(
+    { x: Number(customForm.startX), y: Number(customForm.startY) },
+    { x: Number(customForm.endX), y: Number(customForm.endY) }
+  );
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans select-none antialiased">
+      <header className="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between sticky top-0 z-50 print:hidden">
+        <div className="flex items-center space-x-3">
+          <div className="bg-orange-600 p-2 rounded-lg text-white font-bold flex items-center shadow-lg shadow-orange-600/25">
+            <Server className="w-5 h-5" />
+          </div>
+          <div>
+            <h1 className="font-bold tracking-tight text-base sm:text-lg text-white flex items-center gap-2">
+              Aiforge <span className="text-xs px-2 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full font-mono">CORE v1.0 FREEZE • BRIDGE v0.1</span>
+            </h1>
+            <p className="text-xs text-slate-400 hidden sm:block">🔒 FROZEN CORE • construction stav řídí v6 App Shell</p>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-1 sm:space-x-2">
+          {[
+            { id: 'preview', label: 'Geometrie' },
+            { id: 'cuttingList', label: 'Řezný list' },
+            { id: 'pricing', label: 'Kalkulace' },
+            { id: 'json', label: 'JSON' }
+          ].map(tab => (
+            <button 
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === tab.id ? 'bg-orange-600 text-white shadow-md shadow-orange-600/20' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 flex flex-col gap-6">
+        {activeTab === 'input' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 flex flex-col gap-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6 shadow-xl">
+                <h2 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
+                  <Server className="w-4 h-4 text-orange-500" /> Stav AI Backend Proxy
+                </h2>
+                <p className="text-sm text-slate-400 mb-4">
+                  Backend je v RC2 pouze READ-ONLY. Změny z AI se do CORE nikdy neaplikují přímo.
+                </p>
+
+                <div className="mb-4">
+                  <label className="text-xs text-slate-400 font-mono block mb-1">Cílová URL serverového endpointu:</label>
+                  <input 
+                    type="text" 
+                    value={backendProxyUrl}
+                    onChange={(e) => setBackendProxyUrl(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-amber-400 font-mono"
+                  />
+                </div>
+
+                {apiResponseLog && (
+                  <div className={`mb-4 border text-xs p-3 rounded-lg flex flex-col gap-2 font-mono ${apiResponseLog.mode === 'offline_fallback' ? 'bg-amber-950/20 border-amber-500/40' : 'bg-slate-950 border-emerald-500/40'}`}>
+                    <div className="flex items-center gap-2 font-bold">
+                      {apiResponseLog.mode === 'offline_fallback' ? (
+                        <>
+                          <AlertTriangle className="w-4 h-4 text-amber-400" /> 
+                          <span className="text-amber-400">AI backend nepřipojen — Offline fallback aktivní</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4 text-emerald-400" /> 
+                          <span className="text-emerald-400">Online spojení READ-ONL
