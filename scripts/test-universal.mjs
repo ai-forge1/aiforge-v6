@@ -8,6 +8,13 @@ import {
   applyUniversalApprovedActions,
   expandUniversalPatternActions
 } from "../src/Aiforge_Universal_Action_Adapter_v0.2.js";
+import {
+  buildUniversalDimensions
+} from "../src/Aiforge_Universal_Dimension_Engine_v0.1.js";
+import {
+  theoreticalWeightPerMeter,
+  calculateUniversalCost
+} from "../src/Aiforge_Universal_Cost_Engine_v0.1.js";
 
 let passed = 0;
 function test(name, fn) {
@@ -25,6 +32,30 @@ const gate = {
   globalDimensions: { openingWidth: 5900, frameHeight: 1600, counterweightLength: 2500, totalLength: 8400 },
   elements: [{ id: "P01" }]
 };
+
+function makeRailing() {
+  const base = createUniversalConstructionBase("railing", "Zábradlí");
+  const frame = { name: "Jekl 40x40x2" };
+  const infill = { name: "Jekl 20x20x2" };
+  const actions = [
+    { type: "add_element", element: { role: "bottom_rail", profile: frame, start: { x: 0, y: 0 }, end: { x: 3200, y: 0 } } },
+    { type: "add_element", element: { role: "top_rail", profile: frame, start: { x: 0, y: 1000 }, end: { x: 3200, y: 1000 } } },
+    { type: "add_element", element: { role: "left_post", profile: frame, start: { x: 0, y: 0 }, end: { x: 0, y: 1000 } } },
+    { type: "add_element", element: { role: "right_post", profile: frame, start: { x: 3200, y: 0 }, end: { x: 3200, y: 1000 } } },
+    {
+      type: "add_element",
+      temporaryId: "PATTERN01",
+      element: {
+        role: "vertical_infill",
+        profile: infill,
+        start: { x: 110, y: 40 },
+        end: { x: 110, y: 960 },
+        parameters: { repeatLinear: { axis: "x", spacingMm: 110, fromMm: 110, toMm: 3090 } }
+      }
+    }
+  ];
+  return applyUniversalApprovedActions(base, actions);
+}
 
 test("router sends railing to universal engine", () => {
   const r = routeConstructionPrompt("Udělej zábradlí 3200 x 1000 mm", gate);
@@ -95,28 +126,7 @@ test("repeatLinear expands one AI action deterministically", () => {
 });
 
 test("railing frame plus pattern builds many elements from compact actions", () => {
-  const base = createUniversalConstructionBase("railing", "Zábradlí");
-  const frame = { name: "Jekl 40x40x2" };
-  const infill = { name: "Jekl 20x20x2" };
-  const actions = [
-    { type: "add_element", element: { role: "bottom_rail", profile: frame, start: { x: 0, y: 0 }, end: { x: 3200, y: 0 } } },
-    { type: "add_element", element: { role: "top_rail", profile: frame, start: { x: 0, y: 1000 }, end: { x: 3200, y: 1000 } } },
-    { type: "add_element", element: { role: "left_post", profile: frame, start: { x: 0, y: 0 }, end: { x: 0, y: 1000 } } },
-    { type: "add_element", element: { role: "right_post", profile: frame, start: { x: 3200, y: 0 }, end: { x: 3200, y: 1000 } } },
-    {
-      type: "add_element",
-      temporaryId: "PATTERN01",
-      element: {
-        role: "vertical_infill",
-        profile: infill,
-        start: { x: 110, y: 40 },
-        end: { x: 110, y: 960 },
-        parameters: { repeatLinear: { axis: "x", spacingMm: 110, fromMm: 110, toMm: 3090 } }
-      }
-    }
-  ];
-
-  const result = applyUniversalApprovedActions(base, actions);
+  const result = makeRailing();
   assert.equal(result.ok, true);
   assert.equal(result.inputActionCount, 5);
   assert.equal(result.expandedActionCount, 32);
@@ -124,6 +134,53 @@ test("railing frame plus pattern builds many elements from compact actions", () 
   assert.equal(result.construction.bounds.width, 3200);
   assert.equal(result.construction.bounds.height, 1000);
   assert.equal(result.construction.elements[4].lengthMm, 920);
+});
+
+test("dimension engine creates overall width and height", () => {
+  const result = makeRailing();
+  const dimensions = buildUniversalDimensions(result.construction, "XY");
+  const width = dimensions.dimensions.find(d => d.id === "overall-horizontal");
+  const height = dimensions.dimensions.find(d => d.id === "overall-vertical");
+  assert.equal(width.valueMm, 3200);
+  assert.equal(height.valueMm, 1000);
+});
+
+test("dimension engine finds repeated 110 mm spacing", () => {
+  const result = makeRailing();
+  const dimensions = buildUniversalDimensions(result.construction, "XY");
+  const spacing = dimensions.dimensions.find(d => d.source === "generated_pattern");
+  assert.equal(spacing.valueMm, 110);
+  assert.match(spacing.label, /110 mm/);
+});
+
+test("JEKL theoretical kg/m is deterministic and labeled", () => {
+  const weight = theoreticalWeightPerMeter("Jekl 40x40x2");
+  assert.equal(weight.kgPerMeter, 2.386);
+  assert.equal(weight.source, "calculated_theoretical");
+  assert.equal(theoreticalWeightPerMeter("C profil 80x80x5"), null);
+});
+
+test("cost engine calculates material labor and margin from user settings", () => {
+  const base = createUniversalConstructionBase("frame", "Rám");
+  const built = applyUniversalApprovedActions(base, [{
+    type: "add_element",
+    element: {
+      role: "rail",
+      profile: { name: "Jekl 40x40x2" },
+      start: { x: 0, y: 0 },
+      end: { x: 1000, y: 0 }
+    }
+  }]);
+  const cost = calculateUniversalCost(built.construction, {
+    steelPricePerKg: 30,
+    hourlyRate: 500,
+    laborHours: 2,
+    marginPercent: 10
+  });
+  assert.equal(cost.complete, true);
+  assert.equal(cost.totals.materialCost, 71.58);
+  assert.equal(cost.totals.laborCost, 1000);
+  assert.equal(cost.totals.salePrice, 1178.74);
 });
 
 test("3D length is deterministic", () => {
@@ -197,4 +254,4 @@ test("generic dimensions accept safe named mm fields", () => {
   assert.equal(result.construction.globalDimensions.rise, 180);
 });
 
-console.log(`\n${passed}/11 Universal Engine tests PASS`);
+console.log(`\n${passed}/15 Universal Engine tests PASS`);
