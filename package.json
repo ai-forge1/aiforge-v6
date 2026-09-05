@@ -4,8 +4,8 @@
   "version": "0.2.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "node scripts/build-core-bridge.mjs && vite",
+    "build": "node scripts/build-core-bridge.mjs && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
