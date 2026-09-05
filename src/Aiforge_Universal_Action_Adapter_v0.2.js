@@ -1,10 +1,13 @@
 import { applyUniversalApprovedActions as applyV01 } from "./Aiforge_Universal_Action_Adapter_v0.1.js";
 
 // ============================================================
-// AIFORGE v6 — UNIVERSAL ACTION ADAPTER v0.2
+// AIFORGE v6 — UNIVERSAL ACTION ADAPTER v0.3
 //
 // Nad v0.1 přidává kompaktní parametrické opakování prvků.
 // AI nemusí vypisovat desítky stejných add_element akcí.
+//
+// v0.3 navíc chrání hranici Universal vs Gate:
+// gate-only globální rozměry nesmí být aplikovány na universal projekt.
 //
 // Supported element.parameters.repeatLinear:
 // {
@@ -21,6 +24,13 @@ import { applyUniversalApprovedActions as applyV01 } from "./Aiforge_Universal_A
 
 const MAX_PATTERN_ITEMS = 500;
 
+const GATE_ONLY_DIMENSION_FIELDS = new Set([
+  "openingWidth",
+  "frameHeight",
+  "counterweightLength",
+  "totalLength"
+]);
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -31,6 +41,23 @@ function isObject(value) {
 
 function finite(value) {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function validateUniversalBoundary(actions) {
+  if (!Array.isArray(actions)) {
+    throw new Error("actions musí být pole.");
+  }
+
+  actions.forEach((action, index) => {
+    if (
+      action?.type === "update_dimension" &&
+      GATE_ONLY_DIMENSION_FIELDS.has(action?.field)
+    ) {
+      throw new Error(
+        `actions[${index}]: rozměr ${action.field} patří do Gate Engine a nesmí být aplikován přes Universal Adapter.`
+      );
+    }
+  });
 }
 
 function normalizePattern(pattern, template) {
@@ -139,6 +166,8 @@ export function expandUniversalPatternActions(actions) {
 
 export function applyUniversalApprovedActions(currentConstruction, actions) {
   try {
+    validateUniversalBoundary(actions);
+
     const expandedActions = expandUniversalPatternActions(actions);
     const result = applyV01(currentConstruction, expandedActions);
 
@@ -159,4 +188,4 @@ export function applyUniversalApprovedActions(currentConstruction, actions) {
   }
 }
 
-export const AIFORGE_UNIVERSAL_ACTION_ADAPTER_VERSION = "0.2";
+export const AIFORGE_UNIVERSAL_ACTION_ADAPTER_VERSION = "0.3";
