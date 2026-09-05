@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import AiforgeV6AppShell from "./Aiforge_v6_AppShell_v0.4.jsx";
+import AiforgeV6AppShell from "./Aiforge_v6_AppShell_v0.5.jsx";
 import "./app.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
