@@ -1,0 +1,111 @@
+nemají měrnou hmotnost. Hmotnostní součet proto není kompletní. Cena ale může být stále spočítána, pokud má takový profil zadanou přímou cenu za metr.
+              </p>
+            )}
+            {cuttingListAndFinancials.hasUnknownMaterialPrice && (
+              <p className="text-xs text-amber-400 bg-amber-950/20 p-3 rounded border border-amber-500/30">
+                Upozornění: Některý profil nemá žádnou platnou cenovou cestu. Zadej mu cenu za metr, nebo kg/m a cenu/kg (případně globální fallback cenu/kg).
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* TAB 5: JSON STRUCTURE */}
+        {activeTab === 'json' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6 flex flex-col gap-4">
+            <h3 className="text-base font-semibold text-white flex items-center gap-2">
+              <FileText className="w-5 h-5 text-orange-500" /> Aktuální JSON stav construction.elements[]
+            </h3>
+            <pre className="bg-slate-950 p-4 rounded-lg text-xs font-mono text-emerald-400 overflow-x-auto max-h-[500px]">
+              {JSON.stringify(construction, null, 2)}
+            </pre>
+          </div>
+        )}
+
+      </main>
+
+      {/* MODAL PRO VLASTNÍ PRVEK */}
+      {showCustomModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-md w-full flex flex-col gap-4">
+            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+              <Wrench className="w-4 h-4 text-orange-500" /> {editingElementId ? `Upravit ${editingElementId}` : 'Přidat libovolný prvek'}
+            </h3>
+
+            <div className="space-y-3 text-xs max-h-[65vh] overflow-y-auto pr-1">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-slate-400">Role prvku
+                  <input type="text" value={customForm.role} onChange={e => setCustomForm({...customForm, role: e.target.value})} className="mt-1 w-full bg-slate-950 border border-slate-800 rounded p-2 text-emerald-400 font-mono" />
+                </label>
+                <label className="text-slate-400">Název dílu
+                  <input type="text" value={customForm.name} onChange={e => setCustomForm({...customForm, name: e.target.value})} className="mt-1 w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-100" />
+                </label>
+              </div>
+
+              <div className="border border-slate-800 rounded-lg p-3 space-y-3">
+                <div className="text-orange-400 font-semibold">Profil — libovolný typ a rozměr</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="text-slate-400">Typ profilu
+                    <input type="text" value={customForm.profileType} disabled={knownProfileInForm} onChange={e => setCustomForm({...customForm, profileType: e.target.value})} placeholder="cantilever_c_profile / jekl / L / ..." className="mt-1 w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-100 font-mono disabled:opacity-60" />
+                  </label>
+                  <label className="text-slate-400">Název profilu
+                    <input type="text" value={customForm.profileName} onChange={e => handleProfileNameChange(e.target.value)} placeholder="C profil 80x80x5" className="mt-1 w-full bg-slate-950 border border-slate-800 rounded p-2 text-orange-300 font-mono" />
+                  </label>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  <label className="text-slate-500">Šířka
+                    <input type="number" min="0.001" disabled={knownProfileInForm} value={customForm.profileWidth} onChange={e => setCustomForm({...customForm, profileWidth: e.target.value})} placeholder="mm" className="mt-1 w-full bg-slate-950 border border-slate-800 rounded p-1.5 text-slate-100 font-mono" />
+                  </label>
+                  <label className="text-slate-500">Výška
+                    <input type="number" min="0.001" disabled={knownProfileInForm} value={customForm.profileHeight} onChange={e => setCustomForm({...customForm, profileHeight: e.target.value})} placeholder="mm" className="mt-1 w-full bg-slate-950 border border-slate-800 rounded p-1.5 text-slate-100 font-mono" />
+                  </label>
+                  <label className="text-slate-500">Tloušťka
+                    <input type="number" min="0.001" step="0.1" disabled={knownProfileInForm} value={customForm.profileThickness} onChange={e => setCustomForm({...customForm, profileThickness: e.target.value})} placeholder="mm" className="mt-1 w-full bg-slate-950 border border-slate-800 rounded p-1.5 text-slate-100 font-mono" />
+                  </label>
+                  <label className="text-slate-500">Průměr
+                    <input type="number" min="0.001" step="0.1" disabled={knownProfileInForm} value={customForm.profileDiameter} onChange={e => setCustomForm({...customForm, profileDiameter: e.target.value})} placeholder="Ø mm" className="mt-1 w-full bg-slate-950 border border-slate-800 rounded p-1.5 text-slate-100 font-mono" />
+                  </label>
+                </div>
+              </div>
+
+              <div className="border border-slate-800 rounded-lg p-3 space-y-3">
+                <div className="text-orange-400 font-semibold">Hmotnost a cena profilu</div>
+                <div className="grid grid-cols-3 gap-2">
+                  <label className="text-slate-400">kg/m
+                    <input type="number" min="0.001" step="0.001" value={customForm.weightPerMeter} onChange={e => setCustomForm({...customForm, weightPerMeter: e.target.value})} placeholder="neznámá" className="mt-1 w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-100 font-mono" />
+                  </label>
+                  <label className="text-slate-400">Kč/m
+                    <input type="number" min="0" step="0.01" value={customForm.pricePerMeter} onChange={e => setCustomForm({...customForm, pricePerMeter: e.target.value})} placeholder="priorita 1" className="mt-1 w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-100 font-mono" />
+                  </label>
+                  <label className="text-slate-400">Kč/kg
+                    <input type="number" min="0" step="0.01" value={customForm.pricePerKg} onChange={e => setCustomForm({...customForm, pricePerKg: e.target.value})} placeholder="priorita 2" className="mt-1 w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-100 font-mono" />
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="text-slate-400">Zdroj hmotnosti
+                    <input type="text" value={customForm.weightSourceNote} onChange={e => setCustomForm({...customForm, weightSourceNote: e.target.value})} placeholder="výrobce / katalog / uživatel" className="mt-1 w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-100" />
+                  </label>
+                  <label className="text-slate-400">Zdroj ceny
+                    <input type="text" value={customForm.priceSourceNote} onChange={e => setCustomForm({...customForm, priceSourceNote: e.target.value})} placeholder="dodavatel / faktura / ceník" className="mt-1 w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-100" />
+                  </label>
+                </div>
+                <p className="text-[10px] text-slate-500">Cena dílu: nejdřív Kč/m. Když chybí, použije se kg/m × Kč/kg. Když chybí obě cesty, program cenu nevymyslí.</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-slate-400">Délka z geometrie (mm)
+                  <input type="text" readOnly value={formLengthPreview ?? 'NEPLATNÁ'} className="mt-1 w-full bg-slate-900 border border-slate-800 rounded p-2 text-orange-300 font-mono" />
+                </label>
+                <label className="text-slate-400">Materiál
+                  <input type="text" value={customForm.materialName} onChange={e => setCustomForm({...customForm, materialName: e.target.value})} placeholder="S235JR / nerez / Al..." className="mt-1 w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-100" />
+                </label>
+              </div>
+
+              <label className="text-slate-400">Orientace z geometrie
+                <input type="text" readOnly value={formOrientationPreview} className="mt-1 w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-300 font-mono" />
+              </label>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-slate-400 block mb-1">Start X, Y (mm)</label>
+                  <div className="flex gap-1">
+                    <input type="number" value={customForm
