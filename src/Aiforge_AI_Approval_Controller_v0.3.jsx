@@ -1,13 +1,13 @@
 import React, { useState } from "react";
 import AiforgeAIChangeReview from "./Aiforge_AI_Change_Review_v1.1.jsx";
 import { applyApprovedActions as applyGateActions } from "./Aiforge_Action_Adapter_v0.2.js";
-import { applyUniversalApprovedActions } from "./Aiforge_Universal_Action_Adapter_v0.1.js";
+import { applyUniversalApprovedActions } from "./Aiforge_Universal_Action_Adapter_v0.2.js";
 
 // ============================================================
-// AIFORGE v6 — REVIEW + ADAPTER CONTROLLER v0.3
+// AIFORGE v6.0 — REVIEW + ADAPTER CONTROLLER v0.3
 //
 // Gate construction -> ověřený Gate Adapter v0.2
-// Universal construction -> Universal Adapter v0.1
+// Universal construction -> Universal Adapter v0.2
 // Frozen CORE source se nemění.
 // ============================================================
 
