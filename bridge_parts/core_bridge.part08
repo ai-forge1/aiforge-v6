@@ -1,0 +1,30 @@
+.startX} onChange={e => setCustomForm({...customForm, startX: e.target.value})} className="w-1/2 bg-slate-950 border border-slate-800 rounded p-1.5 text-slate-100 font-mono" />
+                    <input type="number" value={customForm.startY} onChange={e => setCustomForm({...customForm, startY: e.target.value})} className="w-1/2 bg-slate-950 border border-slate-800 rounded p-1.5 text-slate-100 font-mono" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1">End X, Y (mm)</label>
+                  <div className="flex gap-1">
+                    <input type="number" value={customForm.endX} onChange={e => setCustomForm({...customForm, endX: e.target.value})} className="w-1/2 bg-slate-950 border border-slate-800 rounded p-1.5 text-slate-100 font-mono" />
+                    <input type="number" value={customForm.endY} onChange={e => setCustomForm({...customForm, endY: e.target.value})} className="w-1/2 bg-slate-950 border border-slate-800 rounded p-1.5 text-slate-100 font-mono" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {formError && (
+              <div className="mt-3 bg-red-950/30 border border-red-500/40 text-red-300 text-xs rounded-lg p-3">{formError}</div>
+            )}
+            {knownProfileInForm && (
+              <div className="mt-3 bg-sky-950/30 border border-sky-500/30 text-sky-300 text-[11px] rounded-lg p-3">Známý profil se ukládá atomicky: typ a rozměry pocházejí ze stejného katalogového/default záznamu. Cena může být uživatelská; kg/m lze vědomě přepsat a pak dostane source=userProvided.</div>
+            )}
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => { setShowCustomModal(false); setEditingElementId(null); setFormError(null); }} className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs py-2 px-4 rounded">Zrušit</button>
+              <button onClick={handleSaveElement} className="bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold py-2 px-4 rounded">{editingElementId ? 'Uložit změny' : 'Přidat prvek'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
