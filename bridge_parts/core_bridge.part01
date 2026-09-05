@@ -1,0 +1,241 @@
+// ============================================================
+// AIFORGE CORE v1.0 RC3 — POSLEDNÍ BEZ MOZKU
+// Release candidate 3 po Claude auditu RC1 a opravě zachování uživatelské kalkulace.
+// Změna CORE je povolena pouze pokud:
+// 1) existuje konkrétní důvod,
+// 2) změna projde referenční sadou,
+// 3) po freeze se zvýší verze a změna se zdokumentuje.
+// ============================================================
+
+import React, { useState, useMemo, useEffect } from 'react';
+import { 
+  FileText, DollarSign, Plus, Trash2, 
+  Layers, Shield, RefreshCw, Sun, Check, Wrench, Server, AlertTriangle, Printer, Edit3, Send
+} from 'lucide-react';
+
+// ==========================================
+// 1. GENERÁTOR UNIKÁTNÍCH ID BEZ KOLIZÍ
+// ==========================================
+function getNextElementId(elements) {
+  if (!elements || elements.length === 0) return 'P01';
+  const numbers = elements.map(el => {
+    const match = el.id.match(/^P(\d+)$/);
+    return match ? parseInt(match[1], 10) : 0;
+  });
+  const max = Math.max(...numbers, 0);
+  return `P${String(max + 1).padStart(2, '0')}`;
+}
+
+// ==========================================
+// 2. OVĚŘENÝ KATALOG PROFILŮ PRO CORE FREEZE
+// Jediný zdroj pro tabulkové hmotnosti: Ferona / ČSN EN 10219-2.
+// Profily bez ověřené tabulkové hmotnosti zůstávají weightPerMeter: null.
+// ==========================================
+const VERIFIED_PROFILE_CATALOG = {
+  'Jekl 40x20x2': {
+    type: 'rectangular_tube',
+    dimensions: { width: 40, height: 20, thickness: 2 },
+    weightPerMeter: 1.727,
+    weightSource: 'catalog_verified',
+    weightSourceName: 'Ferona / ČSN EN 10219-2',
+    weightSourceRef: 'Ferona 40x20x2'
+  },
+  'Jekl 60x40x2': {
+    type: 'rectangular_tube',
+    dimensions: { width: 60, height: 40, thickness: 2 },
+    weightPerMeter: 3.02,
+    weightSource: 'catalog_verified',
+    weightSourceName: 'Ferona / ČSN EN 10219-2',
+    weightSourceRef: 'Ferona 60x40x2'
+  }
+};
+
+// Výchozí profil pro tuto dílnu. Je to DEFAULT, ne omezení systému.
+// CORE přijímá libovolný typ a libovolné rozměry profilu.
+const USER_PROFILE_DEFAULTS = {
+  'C profil 80x80x5': {
+    type: 'cantilever_c_profile',
+    dimensions: { width: 80, height: 80, thickness: 5 },
+    weightPerMeter: null,
+    weightSource: 'unknown',
+    weightSourceName: null,
+    weightSourceRef: null
+  }
+};
+
+const MAX_TECHNICAL_DIMENSION_MM = 100000; // softwarová bezpečnostní mez, nikoliv výrobní pravidlo
+
+function normalizeOptionalNumber(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function normalizePositiveNumber(value) {
+  const number = normalizeOptionalNumber(value);
+  return number !== null && number > 0 ? number : null;
+}
+
+function normalizeNonNegativeNumber(value) {
+  const number = normalizeOptionalNumber(value);
+  return number !== null && number >= 0 ? number : null;
+}
+
+function validateDimensionMm(value) {
+  const number = normalizePositiveNumber(value);
+  return number !== null && number <= MAX_TECHNICAL_DIMENSION_MM ? number : null;
+}
+
+function calculateLengthMm(start, end) {
+  if (!start || !end) return null;
+  const x1 = Number(start.x), y1 = Number(start.y), x2 = Number(end.x), y2 = Number(end.y);
+  if (![x1, y1, x2, y2].every(Number.isFinite)) return null;
+  const length = Math.hypot(x2 - x1, y2 - y1);
+  return length > 0 ? Math.round(length) : null;
+}
+
+function deriveOrientation(start, end) {
+  if (!start || !end) return 'arbitrary';
+  const dx = Number(end.x) - Number(start.x);
+  const dy = Number(end.y) - Number(start.y);
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return 'arbitrary';
+  if (dy === 0 && dx !== 0) return 'horizontal';
+  if (dx === 0 && dy !== 0) return 'vertical';
+  return 'diagonal';
+}
+
+function getKnownProfileDefinition(name) {
+  return VERIFIED_PROFILE_CATALOG[name] || USER_PROFILE_DEFAULTS[name] || null;
+}
+
+function isKnownProfileName(name) {
+  return Boolean(getKnownProfileDefinition(name));
+}
+
+function createProfile(name) {
+  const verified = VERIFIED_PROFILE_CATALOG[name];
+  const userDefault = USER_PROFILE_DEFAULTS[name];
+  const base = verified || userDefault || {};
+  return {
+    type: base.type || 'custom',
+    name,
+    dimensions: base.dimensions || {},
+    weightPerMeter: base.weightPerMeter ?? null,
+    weightSource: base.weightSource || 'unknown',
+    weightSourceName: base.weightSourceName || null,
+    weightSourceRef: base.weightSourceRef || null,
+    pricePerMeter: null,
+    pricePerKg: null,
+    priceSource: 'unknown',
+    priceSourceNote: ''
+  };
+}
+
+function createCustomProfile(form) {
+  const dimensions = {};
+  const width = normalizePositiveNumber(form.profileWidth);
+  const height = normalizePositiveNumber(form.profileHeight);
+  const thickness = normalizePositiveNumber(form.profileThickness);
+  const diameter = normalizePositiveNumber(form.profileDiameter);
+  if (width !== null) dimensions.width = width;
+  if (height !== null) dimensions.height = height;
+  if (thickness !== null) dimensions.thickness = thickness;
+  if (diameter !== null) dimensions.diameter = diameter;
+
+  const weightPerMeter = normalizePositiveNumber(form.weightPerMeter);
+  const pricePerMeter = normalizeNonNegativeNumber(form.pricePerMeter);
+  const pricePerKg = normalizeNonNegativeNumber(form.pricePerKg);
+
+  return {
+    type: form.profileType || 'custom',
+    name: form.profileName || 'Vlastní profil',
+    dimensions,
+    weightPerMeter,
+    weightSource: weightPerMeter === null ? 'unknown' : 'userProvided',
+    weightSourceName: weightPerMeter === null ? null : (form.weightSourceNote || 'Zadáno uživatelem'),
+    weightSourceRef: null,
+    pricePerMeter,
+    pricePerKg,
+    priceSource: (pricePerMeter !== null || pricePerKg !== null) ? 'userProvided' : 'unknown',
+    priceSourceNote: form.priceSourceNote || ''
+  };
+}
+
+function buildProfileFromForm(form) {
+  const name = (form.profileName || '').trim() || 'Vlastní profil';
+  const known = getKnownProfileDefinition(name);
+  const manualWeight = normalizePositiveNumber(form.weightPerMeter);
+  const pricePerMeter = normalizeNonNegativeNumber(form.pricePerMeter);
+  const pricePerKg = normalizeNonNegativeNumber(form.pricePerKg);
+
+  if (known) {
+    const base = createProfile(name);
+    const catalogWeight = normalizePositiveNumber(base.weightPerMeter);
+    const manualMatchesCatalog = manualWeight !== null && catalogWeight !== null && Math.abs(manualWeight - catalogWeight) < 1e-9;
+    return {
+      ...base,
+      dimensions: { ...(base.dimensions || {}) },
+      weightPerMeter: manualWeight ?? catalogWeight,
+      weightSource: manualWeight === null || manualMatchesCatalog ? base.weightSource : 'userProvided',
+      weightSourceName: manualWeight === null || manualMatchesCatalog
+        ? base.weightSourceName
+        : (form.weightSourceNote || 'Zadáno uživatelem'),
+      weightSourceRef: manualWeight === null || manualMatchesCatalog ? base.weightSourceRef : null,
+      pricePerMeter,
+      pricePerKg,
+      priceSource: (pricePerMeter !== null || pricePerKg !== null) ? 'userProvided' : 'unknown',
+      priceSourceNote: form.priceSourceNote || ''
+    };
+  }
+
+  return createCustomProfile({ ...form, profileName: name });
+}
+
+function applyProfileNameToForm(form, profileName) {
+  const known = getKnownProfileDefinition(profileName);
+  if (!known) {
+    return {
+      ...form,
+      profileName,
+      profileType: 'custom',
+      profileWidth: '',
+      profileHeight: '',
+      profileThickness: '',
+      profileDiameter: '',
+      weightPerMeter: '',
+      weightSourceNote: '',
+      pricePerMeter: '',
+      pricePerKg: '',
+      priceSourceNote: ''
+    };
+  }
+  const base = createProfile(profileName);
+  return {
+    ...form,
+    profileName,
+    profileType: base.type,
+    profileWidth: base.dimensions?.width ?? '',
+    profileHeight: base.dimensions?.height ?? '',
+    profileThickness: base.dimensions?.thickness ?? '',
+    profileDiameter: base.dimensions?.diameter ?? '',
+    weightPerMeter: base.weightPerMeter ?? '',
+    weightSourceNote: base.weightSourceName || '',
+    pricePerMeter: '',
+    pricePerKg: '',
+    priceSourceNote: ''
+  };
+}
+
+function validateElementForm(form) {
+  const start = { x: Number(form.startX), y: Number(form.startY) };
+  const end = { x: Number(form.endX), y: Number(form.endY) };
+  if (![start.x, start.y, end.x, end.y].every(Number.isFinite)) return 'Start/end musí obsahovat platná čísla.';
+  if (calculateLengthMm(start, end) === null) return 'Prvek musí mít délku větší než 0 mm.';
+
+  for (const [label, value] of [
+    ['Šířka profilu', form.profileWidth], ['Výška profilu', form.profileHeight],
+    ['Tloušťka profilu', form.profileThickness], ['Průměr profilu', form.profileDiameter]
+  ]) {
+    if (value !== '' && normalizePositiveNumber(value) === null) return `${label} musí být větší než 0.`;
+  }
+  if (form.weightPerMeter !== '' && normalizePositiveNumber(form.weightPerMeter) === null) return 'Hmotnost kg/m
