@@ -25,5 +25,5 @@ Bezpečnost:
 Pokud construction obsahuje další custom geometrické elements[] mimo canonical gate frame,
 změna hlavních rozměrů se odmítne, dokud je nebude řešit jejich vlastní geometry modul.
 
-Nasazení do existujícího Vercel projektu:
-Nahraj tento ZIP jako novou verzi projektu a Deploy.
+Git/Vercel:
+Repozitář je připojený k projektu aiforge-v6. Tento commit slouží jako první automatický Git deployment trigger.
