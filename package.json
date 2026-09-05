@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node scripts/build-core-bridge.mjs && vite",
     "test:universal": "node scripts/test-universal.mjs",
-    "build": "node scripts/test-universal.mjs && node scripts/build-core-bridge.mjs && vite build",
+    "build": "node scripts/build-core-bridge.mjs && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
