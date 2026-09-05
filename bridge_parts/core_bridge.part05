@@ -1,0 +1,158 @@
+Y ({apiResponseLog.endpoint})</span>
+                        </>
+                      )}
+                    </div>
+                    {apiResponseLog.warning && <p className="text-amber-300 text-[11px]">{apiResponseLog.warning}</p>}
+                    <pre className="text-[11px] text-slate-300 overflow-x-auto bg-slate-900 p-2 rounded">
+                      {JSON.stringify(apiResponseLog.responseJson, null, 2)}
+                    </pre>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-3">
+                  <textarea 
+                    rows="3"
+                    value={promptText}
+                    onChange={(e) => setPromptText(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-100 focus:outline-none focus:border-orange-500 font-mono resize-none"
+                    placeholder="Zadejte pokyn pro AI..."
+                  />
+                  <button 
+                    onClick={handleExecuteSecureAPI}
+                    disabled={isProcessing}
+                    className="w-full bg-orange-600 hover:bg-orange-500 text-white font-semibold py-3 px-6 rounded-lg transition-all shadow-lg shadow-orange-600/20 flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" /> Ověřuji připojení na backend...
+                      </>
+                    ) : (
+                      <>
+                        Odeslat požadavek <Send className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6 flex flex-col justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-white mb-4 flex items-center justify-between">
+                  <span className="flex items-center gap-2"><Shield className="w-4 h-4 text-orange-500" /> elements[] struktura</span>
+                  <span className="text-xs font-mono bg-slate-950 px-2 py-0.5 rounded text-orange-400">{construction.elements.length} prvků</span>
+                </h3>
+                
+                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                  {construction.elements.map(el => (
+                    <div key={el.id} className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-xs flex items-center justify-between">
+                      <div>
+                        <span className="font-bold text-orange-400 font-mono">{el.id}</span> <span className="text-emerald-400 text-[10px] font-mono">({el.role})</span>
+                        <p className="text-slate-200 font-medium truncate max-w-[140px]">{el.profile.name}</p>
+                        <span className="text-[10px] text-slate-400">{el.lengthMm}mm | Zdroje: {el.source}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => openEditElementModal(el)} className="text-slate-500 hover:text-orange-400 p-1" title="Upravit profil / cenu / geometrii">
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => removeElement(el.id)} className="text-slate-500 hover:text-red-400 p-1" title="Smazat prvek">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-slate-800 flex flex-col gap-2">
+                <button 
+                  onClick={openNewElementModal}
+                  className="w-full bg-orange-600/20 hover:bg-orange-600/30 text-orange-400 border border-orange-500/40 text-xs font-semibold py-2 px-4 rounded-lg flex items-center justify-center gap-2"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Přidat prvek s rolí
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'preview' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6 flex flex-col">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                  <Sun className="w-4 h-4 text-orange-500" /> Geometrický nákres (Vykresleno výhradně ze start/end)
+                </h3>
+                <span className="text-xs font-mono text-slate-400 bg-slate-950 px-2 py-1 rounded border border-slate-800">
+                  Délka: {computedModel.totalLength} mm
+                </span>
+              </div>
+
+              <div className="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-4 flex items-center justify-center min-h-[340px] relative overflow-hidden">
+                <svg viewBox="0 0 950 360" className="w-full h-full max-h-[350px]">
+                  <defs>
+                    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" strokeWidth="0.5" />
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#grid)" />
+
+                  {(() => {
+                    const totalL = computedModel.totalLength;
+                    const h = construction.globalDimensions.frameHeight;
+                    const scaleX = 800 / totalL;
+                    const scaleY = 180 / Math.max(h, 2000);
+                    const svgH = h * scaleY;
+                    const startX = 60;
+                    const startY = 80;
+
+                    return (
+                      <>
+                        {construction.elements.map((el, i) => {
+                          const x1 = startX + el.start.x * scaleX;
+                          const y1 = startY + svgH - (el.start.y * scaleY);
+                          const x2 = startX + el.end.x * scaleX;
+                          const y2 = startY + svgH - (el.end.y * scaleY);
+
+                          let strokeColor = '#e2e8f0';
+                          let strokeW = 2;
+
+                          if (el.role === 'bottom_c_profile') {
+                            strokeColor = '#f97316';
+                            strokeW = 4;
+                          } else if (el.role.includes('diagonal')) {
+                            strokeColor = '#38bdf8';
+                          } else if (el.role === 'infill_louver_slat') {
+                            strokeColor = '#64748b';
+                            strokeW = 1.5;
+                          }
+
+                          return (
+                            <g key={i}>
+                              <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={strokeColor} strokeWidth={strokeW} />
+                              {el.role !== 'infill_louver_slat' && (
+                                <text x={x1 + 3} y={y1 - 3} fill="#94a3b8" fontSize="8" fontFamily="monospace">
+                                  {el.id} ({el.role})
+                                </text>
+                              )}
+                            </g>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
+                </svg>
+              </div>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6 flex flex-col justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-white mb-4 flex items-center justify-between">
+                  <span className="flex items-center gap-2"><Layers className="w-4 h-4 text-orange-500" /> Geometrické parametry</span>
+                </h3>
+                <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs font-mono text-slate-300 flex flex-col gap-2">
+                  <div>Zdroj geometrie protiváhy: <span className="text-amber-400">{construction.globalDimensions.counterweightGeometry.source}</span></div>
+                  <div>Výška koncové stojky: <span className="text-orange-400">{construction.globalDimensions.counterweightGeometry.rearPostHeight} mm</span></div>
+                  <div>Výplň: <span className="text-slate-400">{construction.infill.type}</span></div>
+                  {construction.infill?.generationStatus === 'delegated_to_louver_module' && (
+                    <div className="text-amber-400 text-[11px] mt-2 bg-amber-950/30 p-2 rou
