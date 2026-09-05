@@ -68,6 +68,8 @@ function parseOfflineCommand(prompt, currentConstruction) {
 
     const generatedConstruction = generateTrueCantileverGateTemplate(width, height, currentConstruction?.infill || null, counterweight);
 
+    // Rozměrový příkaz nesmí smazat uživatelem zadanou kalkulaci.
+    // Zachováme finanční nastavení z aktuální konstrukce; defaulty generátoru slouží jen pro chybějící pole.
     updatedConstruction = {
       ...generatedConstruction,
       financials: {
@@ -119,6 +121,7 @@ export default function AiforgeCoreBridgeV01({
     })
   );
 
+  // BRIDGE ONLY: zachovává původní CORE logiku, ale zveřejňuje stav App Shellu.
   const setConstruction = (updater) => {
     setConstructionInternal(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -135,6 +138,8 @@ export default function AiforgeCoreBridgeV01({
 
   useEffect(() => {
     onConstructionReady?.(construction);
+    // pouze první mount bridge
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [showCustomModal, setShowCustomModal] = useState(false);
@@ -177,6 +182,8 @@ export default function AiforgeCoreBridgeV01({
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
       const data = await response.json();
+      // BEZ MOZKU: backend NIKDY nesmí přímo mutovat CORE.
+      // Odpověď je pouze diagnostická; budoucí AI musí jít přes Validator + Change Review.
       setApiResponseLog({
         status: response.status,
         endpoint: backendProxyUrl,
