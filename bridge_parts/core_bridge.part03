@@ -1,0 +1,202 @@
+atedCost: calculatedCost === null ? null : Math.round(calculatedCost),
+      pricingMethod,
+      effectivePricePerKg,
+      effectivePriceSource
+    };
+  });
+
+  const hourlyRate = normalizeNonNegativeNumber(financials.hourlyRate);
+  const laborHours = normalizeNonNegativeNumber(financials.laborHours);
+  const hardwareCost = normalizeNonNegativeNumber(financials.hardwareCost);
+  const marginPercent = normalizeNonNegativeNumber(financials.marginPercent);
+  const financialInputsValid = [hourlyRate, laborHours, hardwareCost, marginPercent].every(v => v !== null);
+
+  const materialCost = hasUnknownElementPrice || hasInvalidGeometry ? null : Math.round(knownMaterialCost);
+  const laborTotal = financialInputsValid ? hourlyRate * laborHours : null;
+  const subtotal = materialCost === null || !financialInputsValid ? null : materialCost + laborTotal + hardwareCost;
+  const finalPrice = subtotal === null ? null : Math.round(subtotal * (1 + marginPercent / 100));
+
+  return {
+    analyzedElements,
+    totalWeightKg: hasUnknownWeight ? null : Math.round(knownWeightKg * 100) / 100,
+    knownWeightKg: Math.round(knownWeightKg * 100) / 100,
+    hasUnknownWeight,
+    hasUnverifiedWeight: hasUnknownWeight,
+    hasUnknownElementPrice,
+    hasUnknownMaterialPrice: hasUnknownElementPrice,
+    hasInvalidGeometry,
+    financialInputsValid,
+    materialPricePerKg: globalPricePerKg,
+    materialPriceSource: globalPricing.source || 'unknown',
+    materialPriceSourceNote: globalPricing.sourceNote || '',
+    knownMaterialCost: Math.round(knownMaterialCost),
+    materialCost,
+    laborTotal,
+    hardwareCost,
+    finalPrice
+  };
+}
+
+function parseOfflineCommand(prompt, currentConstruction) {
+  const text = String(prompt || '').toLowerCase();
+  let updatedConstruction = currentConstruction;
+  const actionsExecuted = [];
+
+  if (text.includes('nakresli') || text.includes('brán') || text.includes('bran')) {
+    const match = text.match(/(\d{2,5})\s*[×x]\s*(\d{2,5})/);
+    if (!match) {
+      return {
+        updatedConstruction: currentConstruction,
+        didMutate: false,
+        actionsExecuted,
+        warning: 'Rozměry nebyly rozpoznány. CORE nic nezměnil — zadejte šířku × výšku v mm.'
+      };
+    }
+
+    const width = validateDimensionMm(parseInt(match[1], 10));
+    const height = validateDimensionMm(parseInt(match[2], 10));
+    if (width === null || height === null) {
+      return { updatedConstruction: currentConstruction, didMutate: false, actionsExecuted, warning: 'Neplatné rozměry brány. CORE nic nezměnil.' };
+    }
+
+    const cwMatch = text.match(/protiv[aá]h[a-zá]*\s*[:=]?\s*(\d{1,6})/i);
+    const rawCounterweight = cwMatch ? parseInt(cwMatch[1], 10) : null;
+    const counterweight = rawCounterweight === null ? null : validateDimensionMm(rawCounterweight);
+    if (rawCounterweight !== null && counterweight === null) {
+      return { updatedConstruction: currentConstruction, didMutate: false, actionsExecuted, warning: 'Neplatná protiváha. CORE nic nezměnil.' };
+    }
+
+    const generatedConstruction = generateTrueCantileverGateTemplate(width, height, currentConstruction?.infill || null, counterweight);
+
+    updatedConstruction = {
+      ...generatedConstruction,
+      financials: {
+        ...(generatedConstruction.financials || {}),
+        ...(currentConstruction?.financials || {}),
+        materialPricing: {
+          ...(generatedConstruction.financials?.materialPricing || {}),
+          ...(currentConstruction?.financials?.materialPricing || {})
+        }
+      }
+    };
+
+    actionsExecuted.push({ type: 'CREATE_CANTILEVER_GATE', width, height, counterweight, source: counterweight !== null ? 'userProvided' : 'default_estimate' });
+    return { updatedConstruction, didMutate: true, actionsExecuted, warning: null };
+  }
+
+  if (text.includes('smaž') || text.includes('smaz')) {
+    const match = text.match(/(?:smaž|smaz)\s+(p\d+)/i);
+    if (!match) return { updatedConstruction: currentConstruction, didMutate: false, actionsExecuted, warning: 'Nebyl rozpoznán identifikátor prvku ke smazání.' };
+    const target = match[1].toUpperCase();
+    const exists = (currentConstruction?.elements || []).some(el => el.id === target);
+    if (!exists) return { updatedConstruction: currentConstruction, didMutate: false, actionsExecuted, warning: `Prvek ${target} neexistuje.` };
+    updatedConstruction = { ...currentConstruction, elements: currentConstruction.elements.filter(el => el.id !== target) };
+    actionsExecuted.push({ type: 'DELETE_ELEMENT', id: target });
+    return { updatedConstruction, didMutate: true, actionsExecuted, warning: null };
+  }
+
+  return { updatedConstruction: currentConstruction, didMutate: false, actionsExecuted, warning: 'Pokyn není podporován lokálním deterministickým parserem. CORE nic nezměnil.' };
+}
+
+export default function AiforgeCoreBridgeV01({
+  externalConstruction = null,
+  onConstructionChange = null,
+  onConstructionReady = null,
+  initialTab = 'preview'
+}) {
+  const [activeTab, setActiveTab] = useState(initialTab);
+  const [promptText, setPromptText] = useState('Nakresli samonosnou bránu 4200 × 1600, žaluzie.');
+  const [backendProxyUrl, setBackendProxyUrl] = useState('https://api.aiforge.cz/v1/secure-ai-interpreter');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [apiResponseLog, setApiResponseLog] = useState(null);
+
+  const [construction, setConstructionInternal] = useState(() =>
+    externalConstruction || generateTrueCantileverGateTemplate(4200, 1600, {
+      type: "louver",
+      profile: { name: "Žaluzie", developedWidth: 125, visibleHeight: null, pitch: null, weightPerMeter: null, source: "pending_user_specification" },
+      slatCount: null,
+      source: { status: "awaiting_parameters" }
+    })
+  );
+
+  const setConstruction = (updater) => {
+    setConstructionInternal(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      onConstructionChange?.(next);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (externalConstruction) {
+      setConstructionInternal(externalConstruction);
+    }
+  }, [externalConstruction]);
+
+  useEffect(() => {
+    onConstructionReady?.(construction);
+  }, []);
+
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [editingElementId, setEditingElementId] = useState(null);
+  const emptyElementForm = {
+    name: 'Vlastní výztuha',
+    role: 'custom_brace',
+    profileType: 'rectangular_tube',
+    profileName: 'Jekl 40x20x2',
+    profileWidth: 40,
+    profileHeight: 20,
+    profileThickness: 2,
+    profileDiameter: '',
+    weightPerMeter: 1.727,
+    weightSourceNote: 'Ferona / ČSN EN 10219-2',
+    pricePerMeter: '',
+    pricePerKg: '',
+    priceSourceNote: '',
+    lengthMm: 1000,
+    orientation: 'horizontal',
+    startX: 0, startY: 500,
+    endX: 1000, endY: 500,
+    materialName: ''
+  };
+  const [customForm, setCustomForm] = useState(emptyElementForm);
+  const [formError, setFormError] = useState(null);
+
+  const handleExecuteSecureAPI = async () => {
+    setIsProcessing(true);
+    setApiResponseLog(null);
+
+    const payload = { prompt: promptText, currentConstruction: construction };
+
+    try {
+      const response = await fetch(backendProxyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+      const data = await response.json();
+      setApiResponseLog({
+        status: response.status,
+        endpoint: backendProxyUrl,
+        mode: 'online_readonly',
+        warning: 'Backend odpověděl, ale CORE v1.0 RC2 ji z bezpečnostních důvodů NEAPLIKOVAL. Budoucí změny musí projít Validator + AI Change Review.',
+        responseJson: data
+      });
+    } catch (err) {
+      console.warn('Backend nepřipojen, spouštím bezpečný lokální deterministický parser:', err);
+      const result = parseOfflineCommand(promptText, construction);
+      if (result.didMutate) setConstruction(result.updatedConstruction);
+      setApiResponseLog({
+        status: 503,
+        endpoint: backendProxyUrl,
+        mode: 'offline_deterministic_parser',
+        warning: result.warning || 'AI backend nepřipojen. Pokyn byl zpracován lokálním deterministickým parserem.',
+        responseJson: {
+          success: result.didMutate,
+          actionsExecuted: result.actionsExecuted,
+          elementsCount: (result.updatedConstruction?.elements || []).length
+        }
+      });
+      if
