@@ -1,0 +1,236 @@
+ musí být větší než 0.';
+  if (form.pricePerMeter !== '' && normalizeNonNegativeNumber(form.pricePerMeter) === null) return 'Cena Kč/m nesmí být záporná.';
+  if (form.pricePerKg !== '' && normalizeNonNegativeNumber(form.pricePerKg) === null) return 'Cena Kč/kg nesmí být záporná.';
+  if (!(form.role || '').trim()) return 'Role prvku nesmí být prázdná.';
+  if (!(form.profileName || '').trim()) return 'Název profilu nesmí být prázdný.';
+  return null;
+}
+
+// ==========================================
+// 3. ROZŠÍŘENÝ KONSTRUKČNÍ MOTOR (Strict Schema v5.3 CORE FREEZE CANDIDATE)
+// ==========================================
+function generateTrueCantileverGateTemplate(openingWidth, frameHeight, infillConfig = null, userCounterweight = null) {
+  const validOpeningWidth = validateDimensionMm(openingWidth);
+  const validFrameHeight = validateDimensionMm(frameHeight);
+  if (validOpeningWidth === null || validFrameHeight === null) {
+    throw new Error('Neplatný rozměr brány: šířka i výška musí být > 0 a v technickém rozsahu CORE.');
+  }
+
+  const isUserCw = userCounterweight !== null;
+  const validCounterweight = isUserCw ? validateDimensionMm(userCounterweight) : null;
+  if (isUserCw && validCounterweight === null) {
+    throw new Error('Neplatná protiváha: musí být > 0 a v technickém rozsahu CORE.');
+  }
+
+  openingWidth = validOpeningWidth;
+  frameHeight = validFrameHeight;
+  const counterweightLength = isUserCw ? validCounterweight : Math.round(openingWidth * 0.4);
+  const totalLength = openingWidth + counterweightLength;
+
+  const counterweightGeometrySource = isUserCw ? 'userProvided' : 'default_estimate';
+
+  let elements = [
+    {
+      id: 'P01',
+      role: 'bottom_c_profile',
+      name: 'Spodní nosný C profil',
+      category: 'c_profile',
+      profile: createProfile('C profil 80x80x5'),
+      material: { name: null, source: 'unknown' },
+      lengthMm: totalLength,
+      orientation: 'horizontal',
+      start: { x: 0, y: 0 },
+      end: { x: totalLength, y: 0 },
+      parameters: { note: 'Hlavní nosný prvek vozíků' },
+      source: 'template_generator'
+    },
+    {
+      id: 'P02',
+      role: 'opening_upper_rail',
+      name: 'Horní profil průjezdu',
+      category: 'jekl',
+      profile: createProfile('Jekl 60x40x2'),
+      material: { name: null, source: 'unknown' },
+      lengthMm: openingWidth,
+      orientation: 'horizontal',
+      start: { x: counterweightLength, y: frameHeight },
+      end: { x: totalLength, y: frameHeight },
+      parameters: {},
+      source: 'template_generator'
+    },
+    {
+      id: 'P03',
+      role: 'leading_post',
+      name: 'Náběhová stojka',
+      category: 'jekl',
+      profile: createProfile('Jekl 60x40x2'),
+      material: { name: null, source: 'unknown' },
+      lengthMm: frameHeight,
+      orientation: 'vertical',
+      start: { x: totalLength, y: 0 },
+      end: { x: totalLength, y: frameHeight },
+      parameters: {},
+      source: 'template_generator'
+    },
+    {
+      id: 'P04',
+      role: 'main_dividing_post',
+      name: 'Hlavní dělicí sloupek',
+      category: 'jekl',
+      profile: createProfile('Jekl 60x40x2'),
+      material: { name: null, source: 'unknown' },
+      lengthMm: frameHeight,
+      orientation: 'vertical',
+      start: { x: counterweightLength, y: 0 },
+      end: { x: counterweightLength, y: frameHeight },
+      parameters: {},
+      source: 'template_generator'
+    },
+    {
+      id: 'P05',
+      role: 'counterweight_end_post',
+      name: 'Koncová stojka protiváhy',
+      category: 'jekl',
+      profile: createProfile('Jekl 60x40x2'),
+      material: { name: null, source: 'unknown' },
+      lengthMm: Math.round(frameHeight * 0.6),
+      orientation: 'vertical',
+      start: { x: 0, y: 0 },
+      end: { x: 0, y: Math.round(frameHeight * 0.6) },
+      parameters: { counterweightGeometrySource },
+      source: 'template_generator'
+    },
+    {
+      id: 'P06',
+      role: 'counterweight_upper_diagonal',
+      name: 'Horní sklon protiváhy',
+      category: 'diagonal',
+      profile: createProfile('Jekl 60x40x2'),
+      material: { name: null, source: 'unknown' },
+      lengthMm: calculateLengthMm({ x: 0, y: Math.round(frameHeight * 0.6) }, { x: counterweightLength, y: frameHeight }),
+      orientation: 'diagonal',
+      start: { x: 0, y: Math.round(frameHeight * 0.6) },
+      end: { x: counterweightLength, y: frameHeight },
+      parameters: { counterweightGeometrySource },
+      source: 'template_generator'
+    },
+    {
+      id: 'P07',
+      role: 'main_diagonal_brace',
+      name: 'Vnitřní vyztužení protiváhy',
+      category: 'diagonal',
+      profile: createProfile('Jekl 40x20x2'),
+      material: { name: null, source: 'unknown' },
+      lengthMm: calculateLengthMm({ x: 0, y: 0 }, { x: counterweightLength, y: frameHeight }),
+      orientation: 'diagonal',
+      start: { x: 0, y: 0 },
+      end: { x: counterweightLength, y: frameHeight },
+      parameters: { counterweightGeometrySource },
+      source: 'template_generator'
+    }
+  ];
+
+  const activeInfill = infillConfig || {
+    type: "louver",
+    profile: {
+      name: "Parametrická žaluziová lamela",
+      developedWidth: 125,
+      visibleHeight: null,
+      pitch: null,
+      weightPerMeter: null,
+      source: "pending_user_specification"
+    },
+    startOffsetBottom: null,
+    endOffsetTop: null,
+    slatCount: null,
+    source: { rule: "waiting_for_production_parameters" }
+  };
+
+  // CORE v1.0 záměrně NEGENERUJE polohy žaluzií.
+  // Výrobní rozmístění lamel patří do samostatného Louver modulu, který vytvoří přesné elements[].
+  // CORE pouze uchová konfiguraci a následně umí jakékoli dodané lamely vykreslit, zvážit a ocenit.
+  const storedInfill = {
+    ...activeInfill,
+    generationStatus: 'delegated_to_louver_module'
+  };
+
+  return {
+    projectName: `Samonosná brána ${openingWidth}×${frameHeight}`,
+    globalDimensions: { 
+      openingWidth, 
+      frameHeight, 
+      counterweightLength, 
+      totalLength,
+      counterweightGeometry: {
+        length: counterweightLength,
+        rearPostHeight: Math.round(frameHeight * 0.6),
+        upperConnectionPoint: { x: counterweightLength, y: frameHeight },
+        source: counterweightGeometrySource
+      }
+    },
+    infill: storedInfill,
+    elements,
+    financials: {
+      hourlyRate: 550,
+      laborHours: 14,
+      hardwareCost: 5200,
+      marginPercent: 35,
+      materialPricing: { pricePerKg: null, currency: 'CZK', source: 'unknown', sourceNote: '' }
+    }
+  };
+}
+
+function calculateCuttingListAndFinancials(construction) {
+  let knownWeightKg = 0;
+  let knownMaterialCost = 0;
+  let hasUnknownWeight = false;
+  let hasUnknownElementPrice = false;
+  let hasInvalidGeometry = false;
+
+  const financials = construction.financials || {};
+  const globalPricing = financials.materialPricing || { pricePerKg: null, currency: 'CZK', source: 'unknown', sourceNote: '' };
+  const globalPricePerKg = normalizeNonNegativeNumber(globalPricing.pricePerKg);
+
+  const analyzedElements = (construction.elements || []).map(el => {
+    const profile = el.profile || {};
+    const weightPerM = normalizePositiveNumber(profile.weightPerMeter);
+    const pricePerMeter = normalizeNonNegativeNumber(profile.pricePerMeter);
+    const profilePricePerKg = normalizeNonNegativeNumber(profile.pricePerKg);
+    const effectivePricePerKg = profilePricePerKg ?? globalPricePerKg;
+    const geometryLengthMm = calculateLengthMm(el.start, el.end);
+
+    if (geometryLengthMm === null) hasInvalidGeometry = true;
+    const effectiveLengthMm = geometryLengthMm;
+    const lengthMismatch = geometryLengthMm !== null && Number(el.lengthMm) !== geometryLengthMm;
+
+    const calculatedWeight = weightPerM !== null && effectiveLengthMm !== null
+      ? Math.round((effectiveLengthMm / 1000) * weightPerM * 100) / 100
+      : null;
+
+    if (calculatedWeight !== null) knownWeightKg += calculatedWeight;
+    else hasUnknownWeight = true;
+
+    let calculatedCost = null;
+    let pricingMethod = 'unknown';
+    let effectivePriceSource = 'unknown';
+
+    if (effectiveLengthMm !== null && pricePerMeter !== null) {
+      calculatedCost = (effectiveLengthMm / 1000) * pricePerMeter;
+      pricingMethod = 'price_per_meter';
+      effectivePriceSource = profile.priceSource || 'userProvided';
+    } else if (effectiveLengthMm !== null && weightPerM !== null && effectivePricePerKg !== null) {
+      calculatedCost = (effectiveLengthMm / 1000) * weightPerM * effectivePricePerKg;
+      pricingMethod = profilePricePerKg !== null ? 'profile_weight_x_profile_price_per_kg' : 'profile_weight_x_global_price_per_kg';
+      effectivePriceSource = profilePricePerKg !== null ? (profile.priceSource || 'userProvided') : (globalPricing.source || 'unknown');
+    }
+
+    if (calculatedCost !== null && calculatedCost >= 0) knownMaterialCost += calculatedCost;
+    else hasUnknownElementPrice = true;
+
+    return {
+      ...el,
+      lengthMm: effectiveLengthMm,
+      storedLengthMm: el.lengthMm,
+      lengthMismatch,
+      calculatedWeight,
+      calcul
