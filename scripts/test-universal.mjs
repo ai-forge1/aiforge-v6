@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import {
   routeConstructionPrompt,
-  createUniversalConstructionBase
+  createUniversalConstructionBase,
+  buildUniversalBrainPrompt
 } from "../src/Aiforge_Product_Router_v0.1.js";
 import {
-  applyUniversalApprovedActions
-} from "../src/Aiforge_Universal_Action_Adapter_v0.1.js";
+  applyUniversalApprovedActions,
+  expandUniversalPatternActions
+} from "../src/Aiforge_Universal_Action_Adapter_v0.2.js";
 
 let passed = 0;
 function test(name, fn) {
@@ -43,6 +45,14 @@ test("unknown new construction uses safe universal fallback", () => {
   assert.equal(r.productType, "generic");
 });
 
+test("Universal Brain prompt requires compact repeatLinear", () => {
+  const route = routeConstructionPrompt("Udělej zábradlí", gate);
+  const p = buildUniversalBrainPrompt("Udělej zábradlí", route);
+  assert.match(p, /repeatLinear/);
+  assert.match(p, /Maximálně 12 AI actions/);
+  assert.match(p, /Vrať VÝHRADNĚ jeden validní JSON objekt/);
+});
+
 test("universal frame creates exact bounds", () => {
   const base = createUniversalConstructionBase("railing", "Zábradlí");
   const profile = { name: "Jekl 40x40x2" };
@@ -58,6 +68,62 @@ test("universal frame creates exact bounds", () => {
   assert.equal(result.construction.bounds.height, 1000);
   assert.equal(result.construction.elements[0].lengthMm, 3200);
   assert.equal(result.construction.elements[2].lengthMm, 1000);
+});
+
+test("repeatLinear expands one AI action deterministically", () => {
+  const actions = [{
+    type: "add_element",
+    temporaryId: "PATTERN01",
+    element: {
+      role: "vertical_infill",
+      name: "Svislá výplň",
+      profile: { name: "Jekl 20x20x2" },
+      start: { x: 110, y: 40 },
+      end: { x: 110, y: 960 },
+      parameters: {
+        repeatLinear: { axis: "x", spacingMm: 110, fromMm: 110, toMm: 3090 }
+      }
+    }
+  }];
+
+  const expanded = expandUniversalPatternActions(actions);
+  assert.equal(expanded.length, 28);
+  assert.equal(expanded[0].element.start.x, 110);
+  assert.equal(expanded.at(-1).element.start.x, 3080);
+  assert.equal(expanded[0].element.end.y, 960);
+  assert.equal(expanded[0].element.parameters.repeatLinear, undefined);
+});
+
+test("railing frame plus pattern builds many elements from compact actions", () => {
+  const base = createUniversalConstructionBase("railing", "Zábradlí");
+  const frame = { name: "Jekl 40x40x2" };
+  const infill = { name: "Jekl 20x20x2" };
+  const actions = [
+    { type: "add_element", element: { role: "bottom_rail", profile: frame, start: { x: 0, y: 0 }, end: { x: 3200, y: 0 } } },
+    { type: "add_element", element: { role: "top_rail", profile: frame, start: { x: 0, y: 1000 }, end: { x: 3200, y: 1000 } } },
+    { type: "add_element", element: { role: "left_post", profile: frame, start: { x: 0, y: 0 }, end: { x: 0, y: 1000 } } },
+    { type: "add_element", element: { role: "right_post", profile: frame, start: { x: 3200, y: 0 }, end: { x: 3200, y: 1000 } } },
+    {
+      type: "add_element",
+      temporaryId: "PATTERN01",
+      element: {
+        role: "vertical_infill",
+        profile: infill,
+        start: { x: 110, y: 40 },
+        end: { x: 110, y: 960 },
+        parameters: { repeatLinear: { axis: "x", spacingMm: 110, fromMm: 110, toMm: 3090 } }
+      }
+    }
+  ];
+
+  const result = applyUniversalApprovedActions(base, actions);
+  assert.equal(result.ok, true);
+  assert.equal(result.inputActionCount, 5);
+  assert.equal(result.expandedActionCount, 32);
+  assert.equal(result.construction.elements.length, 32);
+  assert.equal(result.construction.bounds.width, 3200);
+  assert.equal(result.construction.bounds.height, 1000);
+  assert.equal(result.construction.elements[4].lengthMm, 920);
 });
 
 test("3D length is deterministic", () => {
@@ -131,4 +197,4 @@ test("generic dimensions accept safe named mm fields", () => {
   assert.equal(result.construction.globalDimensions.rise, 180);
 });
 
-console.log(`\n${passed}/8 Universal Engine tests PASS`);
+console.log(`\n${passed}/11 Universal Engine tests PASS`);
