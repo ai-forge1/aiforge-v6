@@ -1,9 +1,9 @@
 // ============================================================
-// AIFORGE v6 — PRODUCT ROUTER v0.2
+// AIFORGE v6 — PRODUCT ROUTER v0.3
 //
 // Rozlišuje specializovanou samonosnou bránu od univerzálních
 // zámečnických konstrukcí. Neprovádí geometrii a nic neodhaduje.
-// v0.2: Universal Brain používá kompaktní parametrické patterny.
+// v0.3: lepší čeština + výrazně kratší Universal Brain prompt.
 // ============================================================
 
 const PRODUCT_RULES = [
@@ -44,8 +44,12 @@ const PRODUCT_RULES = [
   },
   {
     type: "table_frame",
-    label: "Rám / podnož stolu",
-    patterns: [/\bstol\w*/i, /\bpodno[zž]\w*/i]
+    label: "Pracovní stůl / podnož",
+    patterns: [
+      /\bst[oů]l\w*/i,
+      /\bpracovn\w*\s+st[oů]l\w*/i,
+      /\bpodno[zž]\w*/i
+    ]
   },
   {
     type: "rack",
@@ -86,7 +90,7 @@ const NEW_CONSTRUCTION_PATTERNS = [
   /\bvyrob\w*/i,
   /\bchci\b/i,
   /\bpotřebuj\w*/i,
-  /\bnov\w*\s+(konstrukc|r[aá]m|br[aá]n|brank|z[aá]bradl|plot|schod|stol|reg[aá]l|př[ií]stře[sš]ek|pergol)/i
+  /\bnov\w*\s+(konstrukc|r[aá]m|br[aá]n|brank|z[aá]bradl|plot|schod|st[oů]l|reg[aá]l|př[ií]stře[sš]ek|pergol)/i
 ];
 
 function detectProduct(prompt) {
@@ -181,7 +185,7 @@ export function createUniversalConstructionBase(productType, productLabel) {
     globalDimensions: {},
     elements: [],
     metadata: {
-      createdBy: "aiforge_product_router_v0.2",
+      createdBy: "aiforge_product_router_v0.3",
       geometryMode: "straight_profile_elements",
       units: "mm"
     }
@@ -189,7 +193,24 @@ export function createUniversalConstructionBase(productType, productLabel) {
 }
 
 export function buildUniversalBrainPrompt(userPrompt, route) {
-  return `AIFORGE UNIVERSAL CONSTRUCTION MODE\n\nVýrobek: ${route.productLabel} (${route.productType})\nRežim: ${route.isNewConstruction ? "nová konstrukce" : "úprava existující konstrukce"}\n\nVrať VÝHRADNĚ jeden validní JSON objekt proposal. Žádný markdown, žádné vysvětlení před ani za JSONem.\n\nPovinný obal:\n{\n  "intent": "modify_construction",\n  "actions": [],\n  "warnings": [],\n  "questions": []\n}\n\nPravidla:\n- Pracuj produktově neutrálně. Nepoužívej pravidla samonosné brány, pokud uživatel výslovně nepožaduje samonosnou/posuvnou bránu.\n- Každý rovný profil reprezentuj přes add_element/update_element s přesnými start/end souřadnicemi v mm.\n- Souřadnice: x = vodorovně, y = svisle, z = hloubka, pokud je potřeba 3D.\n- lengthMm NEPOSÍLEJ; Adapter jej vždy vypočítá ze start/end.\n- Nevymýšlej chybějící kritické výrobní rozměry. Pokud bez nich nelze bezpečně určit geometrii, vrať questions a actions nech prázdné.\n- Hmotnost, cenu a katalogové údaje neodhaduj. Neznámé hodnoty nech null/unknown.\n- Pro nový výrobek dostáváš prázdný construction; vytvoř jen prvky, které skutečně vyplývají ze zadání.\n- Používej pouze actions: add_element, update_element, delete_element, move_element, update_dimension.\n\nKRITICKÉ PRAVIDLO PRO OPAKOVANÉ PRVKY:\n- NIKDY nevypisuj desítky stejných add_element akcí.\n- Pokud se stejný profil pravidelně opakuje (svislé výplně, latě, příčky, sloupky, rošty apod.), pošli JEDEN template add_element s element.parameters.repeatLinear.\n- repeatLinear má tvar:\n  { "axis": "x", "spacingMm": 110, "fromMm": 110, "toMm": 3090 }\n  nebo { "axis": "x", "spacingMm": 110, "fromMm": 110, "count": 28 }.\n- Template start/end popisuje jeden skutečný opakovaný prvek. Adapter v0.2 jej deterministicky rozmnoží.\n- Maximálně 12 AI actions v jednom proposal. Pokud by bylo potřeba více kvůli opakování, použij repeatLinear.\n\nPříklad kompaktního opakování svislé výplně:\n{\n  "type": "add_element",\n  "temporaryId": "PATTERN01",\n  "element": {\n    "role": "vertical_infill",\n    "name": "Svislá výplň",\n    "profile": {\n      "name": "Jekl 20x20x2",\n      "weightPerMeter": null,\n      "weightSource": "unknown",\n      "pricePerMeter": null,\n      "pricePerKg": null,\n      "priceSource": "unknown"\n    },\n    "start": { "x": 110, "y": 40 },\n    "end": { "x": 110, "y": 960 },\n    "parameters": {\n      "repeatLinear": { "axis": "x", "spacingMm": 110, "fromMm": 110, "toMm": 3090 }\n    },\n    "source": "ai_proposal"\n  }\n}\n\nPožadavek uživatele:\n${String(userPrompt || "").trim()}`;
+  return `AIFORGE UNIVERSAL MODE
+PRODUCT=${route.productType}; LABEL=${route.productLabel}; MODE=${route.isNewConstruction ? "new" : "edit"}
+
+Return ONLY valid proposal JSON:
+{"intent":"modify_construction","actions":[],"warnings":[],"questions":[]}
+
+RULES:
+1. Use only add_element, update_element, delete_element, move_element, update_dimension.
+2. Straight profiles use exact start/end mm. x=width, y=height, z=depth. Never send lengthMm; Adapter calculates it.
+3. Keep response compact. For profile send only {"name":"..."} unless verified weight/price was explicitly supplied. Do NOT repeat null/unknown metadata.
+4. Max 12 actions. Repeated equal members MUST use one add_element template with parameters.repeatLinear={"axis":"x|y|z","spacingMm":N,"fromMm":N,"toMm":N} or count.
+5. Never invent missing critical dimensions, prices, weights or catalog values. If required data is missing, ask in questions and do not guess.
+6. Do not apply gate-specific rules outside a sliding/cantilever gate.
+7. Current universal engine models straight profile members. Sheet/plate/panel parts are NOT line members: do not fake them. Mention unsupported sheet/plate in warnings while still creating the supported profile skeleton when possible.
+8. For 3D frames, use z coordinates and repeatLinear wherever possible so the proposal stays below 12 actions.
+
+USER REQUEST:
+${String(userPrompt || "").trim()}`;
 }
 
-export const AIFORGE_PRODUCT_ROUTER_VERSION = "0.2";
+export const AIFORGE_PRODUCT_ROUTER_VERSION = "0.3";
