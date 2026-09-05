@@ -1,9 +1,9 @@
 // ============================================================
-// AIFORGE v6 — PRODUCT ROUTER v0.3
+// AIFORGE v6 — PRODUCT ROUTER v0.4
 //
 // Rozlišuje specializovanou samonosnou bránu od univerzálních
 // zámečnických konstrukcí. Neprovádí geometrii a nic neodhaduje.
-// v0.3: lepší čeština + výrazně kratší Universal Brain prompt.
+// v0.4: gate-specific kombinace průjezd + protiváha přepne do Gate Engine.
 // ============================================================
 
 const PRODUCT_RULES = [
@@ -14,7 +14,9 @@ const PRODUCT_RULES = [
     patterns: [
       /\bsamonosn\w*\s+br[aá]n\w*/i,
       /\bposuvn\w*\s+br[aá]n\w*/i,
-      /\bbr[aá]n\w*\s+samonosn\w*/i
+      /\bbr[aá]n\w*\s+samonosn\w*/i,
+      /\bpr[uů]jezd\w*[\s\S]{0,120}\bprotiv[aá]h\w*/i,
+      /\bprotiv[aá]h\w*[\s\S]{0,120}\bpr[uů]jezd\w*/i
     ]
   },
   {
@@ -185,7 +187,7 @@ export function createUniversalConstructionBase(productType, productLabel) {
     globalDimensions: {},
     elements: [],
     metadata: {
-      createdBy: "aiforge_product_router_v0.3",
+      createdBy: "aiforge_product_router_v0.4",
       geometryMode: "straight_profile_elements",
       units: "mm"
     }
@@ -213,4 +215,4 @@ USER REQUEST:
 ${String(userPrompt || "").trim()}`;
 }
 
-export const AIFORGE_PRODUCT_ROUTER_VERSION = "0.3";
+export const AIFORGE_PRODUCT_ROUTER_VERSION = "0.4";
