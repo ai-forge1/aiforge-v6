@@ -1,11 +1,12 @@
 {
   "name": "aiforge-v6",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "dev": "node scripts/build-core-bridge.mjs && vite",
-    "build": "node scripts/build-core-bridge.mjs && vite build",
+    "test:universal": "node scripts/test-universal.mjs",
+    "build": "node scripts/test-universal.mjs && node scripts/build-core-bridge.mjs && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
